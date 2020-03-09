@@ -1,0 +1,190 @@
+#!/bin/bash
+# Made by lirfu
+#
+# Skripta za usporedbu dobivenih rezultata programa s predviđenim rješenjima testa.
+# Provjera se vrši usporedbom rezultata programa na standardnom izlazu sa zadanim rezultatima zapisanim u datoteci testa (string comparison).
+# Skripta javlja koji su testovi prošli a koji nisu, koliki je postotak prolaznosti, te nudi mogućnosti brze (automatske) provjere. Detaljnije pročitajte naredbom: './ppj -h'.
+#
+# Namijenjeno za korištenje u strukturama generiranim od strane programa Eclipse.
+# Struktura:
+# /PATH/TO/WORKSPACE/
+#	/Lv1
+#	   /src
+#		ClassName.java
+#	   /bin
+#		ClassName.class
+#	   /res
+#		/test01
+#			test.in
+#			test.out
+#		/test02
+#			...
+#		...
+#	/Lv2
+#	   ...
+#	...
+#
+# Upute za korištenje:
+# 	1. Pokretanje: 'PATH/TO/ppj' (sa ili bez zastavica, npr. 'ppj -a -q')
+# 	2. Upis indexa odabranog direktorija projekta: npr. '1' ako je naziv 'Lv1'
+#	3. Odabir ulazne klase
+#	4. Odabir indeksa testa (OPCIONALNO)
+#	5. Watch the magic happen!
+#
+# VAŽNE NAPOMENE PRIJE POKRETANJA!
+# - Omogući pokretanje skripte: 'chmod +x PATH/TO/ppj'
+# - Promjeni putanju do svog workspace-a.
+# - Ako je potrebno promijeni prefikse datoteka i direktorija.
+
+# ===== CONFIGURATIONS =====
+
+# Path to workspace.
+workspace="/PATH/TO/WORKSPACE/"
+# Project folder prefix name.
+projectPrefix="Lv"
+# Tests folder prefix name.
+testPrefix="test"
+# Test file names.
+inputFile="test.in"
+outputFile="test.out"
+
+
+clear
+echo -e "\e[1;34m"
+
+# ===== Flags for additional abilities =====
+SKIP=false  # Tests automation flag.
+QUIET=false # Quiet mode flag.
+while [[ $# -gt 0 ]]
+do
+	case "$1" in
+	    -a|--auto)
+		SKIP=true
+	    ;;
+	    -q|--quiet)
+		QUIET=true
+	    ;;
+	    -h|--help)
+	    	echo "ppj - Runs the output comparison tests. Detailed usage is described inside the script."
+	    	echo ""
+	    	echo "Usage:"
+	    	echo " ppj [-flag1 -flag2 ...]"
+	    	echo ""
+	    	echo "Flags:"
+	    	echo " -h, --help     Show this help message."
+	    	echo " -a, --auto     Don't require user interaction for proceesing to the next test (automatically sweeps through tests)."
+	    	echo " -q, --quiet    Don't show the output comparison of results. Shows only the test name and passing color."
+	    	echo ""
+	    	echo "Made by lirfu"
+	    	echo -e "\e[0m"
+	    	exit 0
+	    ;;
+	    *)
+		echo "Unknown flag $1."
+		echo -e "\e[0m"
+		exit 1
+	    ;;
+	esac
+	shift # Past argument.
+done
+
+# ===== SPECIAL FUNCTIONS =====
+function testFilename {
+	#Get program result.
+	RESULT="$(java $className < $testFolder/$inputFile)"
+	#Read expected result.
+	EXPECT="$(cat $testFolder/$outputFile)"
+	
+	#Compare and display all results (color coded).
+	if [ "${RESULT}" == "${EXPECT}" ] # ---------- Success
+	then
+		if ! $QUIET
+		then # Show the comparison between outputs.
+			echo $(basename $testFolder)
+			echo -e "\e[1;32mSUCESS"
+			echo "${RESULT}"
+			echo "==========EXPECTING:"
+			echo "${EXPECT}"
+			echo -e "\e[1;34m"
+		else # For quiet mode show only name and color.
+			echo -e "\e[1;32m$(basename $testFolder)\e[1;34m"
+		fi
+		# Count successes.
+		((successNum++))
+	else # --------------------------------------- Fail
+		if ! $QUIET
+		then # Show the comparison between outputs.
+			echo $(basename $testFolder)
+			echo -e "\e[1;31mERROR"
+			echo "${RESULT}"
+			echo "==========EXPECTING:"
+			echo "${EXPECT}"
+			echo -e "\e[1;34m"
+		else # For quiet mode show only name and color.
+			echo -e "\e[1;31m$(basename $testFolder)\e[1;34m"
+		fi
+		failsList="$failsList -> $(basename $testFolder)\n"
+	fi
+	# Count tests.
+	((testsNum++))
+	
+	if ! $SKIP
+	then #Pause between two tests to give a notion of the execution speed.
+		read
+	fi
+}
+
+# ===== PROGRAM START =====
+
+# Position yourself inside the workspace.
+cd $workspace
+ls
+
+#Index number of project.
+echo "Folder index (for ${projectPrefix}# projects): "
+read labIndex
+labPath=$workspace$projectPrefix$labIndex
+
+#Select class file to run.
+cd $labPath"/bin"
+ls
+echo "Choose the entry class to run: "
+read className
+
+# Initialize test analysis arguments.
+testsNum=0
+successNum=0
+failsList=""
+
+# Cherry pick a test to run.
+echo "Run a single test (ENTER if not)? Index: "
+read testIndex
+if [ -n "$testIndex" ]
+then
+	testFolder="$labPath/res/$testPrefix$testIndex"
+	SKIP=true
+	testFilename
+	exit 0
+fi
+
+clear
+
+#Iterate through test folders.
+for testFolder in $labPath/res/* ; do
+	testFilename
+done
+
+# Calculate the success rate.
+perc=$((100*successNum/testsNum))
+echo -e "\e[1;34mPercentage passed: \e[1;32m${perc}%"
+
+if [ $successNum -lt $testsNum ]
+then
+	# Print out the fails.
+	echo -e "\e[1;34mFails: \e[1;31m \n$failsList"
+fi
+echo -e "\e[0m"
+
+
+
+
